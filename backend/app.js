@@ -1,15 +1,8 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const authRoutes = require('./routes/authRoutes');
-const productRoutes = require('./routes/productRoutes');
+const { getProducts, getProductById } = require('./controllers/productController');
+const router = express.Router();
 
-const app = express();
+router.get('/categories/:categoryname/products', getProducts);
+router.get('/categories/:categoryname/products/:productid', getProductById);
 
-app.use(bodyParser.json());
-app.use('/auth', authRoutes);
-app.use('/categories', productRoutes);
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+module.exports = router;

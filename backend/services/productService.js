@@ -1,80 +1,47 @@
 const axios = require('axios');
-const { testServerBaseUrl } = require('../config');
-const { getCache, setCache } = require('../utils/cache');
+const cache = require('../utils/cache');
 
-const getProducts = async (categoryname, n, page, filters) => {
-  const cacheKey = `products-${categoryname}-${n}-${page}-${JSON.stringify(filters)}`;
-  const cachedData = getCache(cacheKey);
+// Define company API base URLs
+const ecomApis = {
+  'AMZ': 'http://20.244.56.144/test/companies/AMZ/categories',
+  'FLP': 'http://20.244.56.144/test/companies/FLP/categories',
+  'SNP': 'http://20.244.56.144/test/companies/SNP/categories',
+  'MYN': 'http://20.244.56.144/test/companies/MYN/categories',
+  'AZO': 'http://20.244.56.144/test/companies/AZO/categories'
+};
+
+const fetchProducts = async (category, minPrice = 0, maxPrice = Infinity) => {
+  const cacheKey = `${category}-${minPrice}-${maxPrice}`;
+  const cachedData = cache.get(cacheKey);
   if (cachedData) {
     return cachedData;
   }
 
-  const { minPrice, maxPrice, sortBy, sortOrder } = filters;
+  try {
+    // Create requests for all company APIs
+    const requests = Object.keys(ecomApis).map(company =>
+      axios.get(`${ecomApis[company]}/${category}/products/top-10`, {
+        params: {
+          minPrice,
+          maxPrice
+        }
+      })
+    );
 
-  const companyNames = ["AMZ", "FLP", "SNP", "MYN", "AZO"];
-  let allProducts = [];
+    // Await all requests
+    const responses = await Promise.all(requests);
 
-  for (const company of companyNames) {
-    const response = await axios.get(`${testServerBaseUrl}/companies/${company}/categories/${categoryname}/products`, {
-      params: { top: n, minPrice, maxPrice }
-    });
-    allProducts = allProducts.concat(response.data);
+    // Extract products from responses
+    const products = responses.flatMap(response => response.data.products);
+
+    // Cache the result
+    cache.set(cacheKey, products);
+
+    return products;
+  } catch (error) {
+    console.error('Failed to fetch products:', error);
+    throw error;
   }
-
-  if (sortBy) {
-    allProducts.sort((a, b) => {
-      if (sortOrder === 'desc') {
-        return b[sortBy] - a[sortBy];
-      }
-      return a[sortBy] - b[sortBy];
-    });
-  }
-
-  const totalProducts = allProducts.length;
-  const productsPerPage = Math.min(n, 10);
-  const totalPages = Math.ceil(totalProducts / productsPerPage);
-  const currentPage = page ? parseInt(page) : 1;
-
-  const paginatedProducts = allProducts.slice((currentPage - 1) * productsPerPage, currentPage * productsPerPage);
-
-  const response = {
-    products: paginatedProducts,
-    pagination: {
-      totalProducts,
-      totalPages,
-      currentPage,
-      productsPerPage,
-    },
-  };
-
-  setCache(cacheKey, response);
-
-  return response;
 };
 
-const getProductById = async (categoryname, productid) => {
-  const cacheKey = `product-${categoryname}-${productid}`;
-  const cachedData = getCache(cacheKey);
-  if (cachedData) {
-    return cachedData;
-  }
-
-  const companyNames = ["AMZ", "FLP", "SNP", "MYN", "AZO"];
-  for (const company of companyNames) {
-    try {
-      const response = await axios.get(`${testServerBaseUrl}/companies/${company}/categories/${categoryname}/products/${productid}`);
-      if (response.data) {
-        setCache(cacheKey, response.data);
-        return response.data;
-      }
-    } catch (error) {
-      continue;
-    }
-  }
-  throw new Error('Product not found');
-};
-
-module.exports = {
-  getProducts,
-  getProductById,
-};
+module.exports = { fetchProducts };
